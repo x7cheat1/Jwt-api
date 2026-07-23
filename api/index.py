@@ -8,11 +8,20 @@ import jwt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ---------- Fixed Import Path for Vercel Serverless ----------
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
 
-import my_pb2
-import output_pb2
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+try:
+    import my_pb2
+    import output_pb2
+except ImportError:
+    from .. import my_pb2, output_pb2
 
 app = Flask(__name__)
 
@@ -68,7 +77,7 @@ def get_name_region_from_reward(access_token):
             "access-token": access_token,
             "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=15)
+        resp = requests.get(url, headers=headers, verify=False, timeout=10)
         data = resp.json()
         return data.get("uid"), data.get("name"), data.get("region")
     except:
@@ -84,7 +93,7 @@ def get_openid_from_shop2game(uid):
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
         payload = {"app_id": 100067, "login_id": str(uid)}
-        resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=15)
+        resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
         return resp.json().get("open_id")
     except:
         return None
@@ -97,7 +106,7 @@ def get_game_uid_and_level(access_token):
             "access-token": access_token,
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=15)
+        resp = requests.get(url, headers=headers, verify=False, timeout=10)
         data = resp.json()
         if data.get("code") == 0:
             profile = data.get("data", {})
@@ -112,7 +121,7 @@ def get_game_uid_and_level(access_token):
             "access-token": access_token,
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=15)
+        resp = requests.get(url, headers=headers, verify=False, timeout=10)
         data = resp.json()
         if data.get("code") == 0:
             profile = data.get("data", {})
@@ -127,7 +136,7 @@ def get_game_uid_and_level(access_token):
             "access-token": access_token,
             "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=15)
+        resp = requests.get(url, headers=headers, verify=False, timeout=10)
         data = resp.json()
         if data.get("uid"):
             return data.get("uid"), None, None
@@ -191,7 +200,7 @@ def perform_major_login(access_token, open_id):
                 "ReleaseVersion": FREEFIRE_VERSION
             }
 
-            resp = requests.post(MAJOR_LOGIN_URL, data=edata, headers=headers, verify=False, timeout=15)
+            resp = requests.post(MAJOR_LOGIN_URL, data=edata, headers=headers, verify=False, timeout=10)
             if resp.status_code == 200:
                 try:
                     msg = output_pb2.Garena_420()
@@ -219,7 +228,7 @@ def perform_guest_login(uid, password):
         'Connection': "Keep-Alive"
     }
     try:
-        resp = requests.post(OAUTH_URL, data=payload, headers=headers, timeout=15, verify=False)
+        resp = requests.post(OAUTH_URL, data=payload, headers=headers, timeout=10, verify=False)
         data = resp.json()
         if 'access_token' in data:
             return data['access_token'], data.get('open_id')
@@ -233,7 +242,6 @@ def index():
     return jsonify({
         "api": "JWT Generator API (OB54)",
         "credit": "SHAPPNO GMR",
-        "telegram": "@SHAPPNO_004X",
         "status": "running on Vercel ✅"
     })
 
@@ -291,7 +299,7 @@ def token_endpoint():
 
     return jsonify({"status": "error", "message": "Provide access_token or uid+password"}), 400
 
-# 🔥 POST Route (Handles Multiple / List items & Single Objects)
+# ---------- POST Route (Handles Multiple / List JSON) ----------
 @app.route('/process', methods=['POST'])
 def process_json():
     data = request.get_json(silent=True)
@@ -358,6 +366,7 @@ def process_json():
     
     return jsonify(results)
 
+# ---------- Vercel Handler ----------
 app = app
 
 def handler(request, context):
