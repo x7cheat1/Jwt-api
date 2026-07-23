@@ -299,6 +299,27 @@ def token_endpoint():
 
     return jsonify({"status": "error", "message": "Provide access_token or uid+password"}), 400
 
+# ---------- Format Data Route (Added from Example) ----------
+@app.route('/format-example', methods=['POST'])
+def format_data():
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({"error": "Invalid payload"}), 400
+
+    items = data if isinstance(data, list) else [data]
+    formatted_results = []
+
+    for item in items:
+        item_id = item.get("id")
+        if item_id:
+            formatted_results.append({
+                "id": item_id,
+                "status": "processed"
+            })
+
+    return jsonify(formatted_results)
+
 # ---------- POST Route (Handles Multiple / List JSON) ----------
 @app.route('/process', methods=['POST'])
 def process_json():
@@ -371,3 +392,6 @@ app = app
 
 def handler(request, context):
     return app(request, context)
+
+if __name__ == '__main__':
+    app.run(debug=True)
