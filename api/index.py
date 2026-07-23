@@ -90,9 +90,6 @@ def get_openid_from_shop2game(uid):
         return None
 
 def get_game_uid_and_level(access_token):
-    """Fetch Game Real UID and Level from profile API"""
-    
-    # Method 1: Try main profile API
     try:
         url = "https://ff.garena.com/api/antispam/profile"
         headers = {
@@ -102,14 +99,12 @@ def get_game_uid_and_level(access_token):
         }
         resp = requests.get(url, headers=headers, verify=False, timeout=15)
         data = resp.json()
-        
         if data.get("code") == 0:
             profile = data.get("data", {})
             return profile.get("uid"), profile.get("exp"), profile.get("level", 0)
     except:
         pass
-    
-    # Method 2: Try alternative profile API
+
     try:
         url = "https://ff.garena.com/api/player/profile"
         headers = {
@@ -119,14 +114,12 @@ def get_game_uid_and_level(access_token):
         }
         resp = requests.get(url, headers=headers, verify=False, timeout=15)
         data = resp.json()
-        
         if data.get("code") == 0:
             profile = data.get("data", {})
             return profile.get("uid"), profile.get("exp"), profile.get("level", 0)
     except:
         pass
-    
-    # Method 3: Try reward API to get more info
+
     try:
         url = "https://prod-api.reward.ff.garena.com/redemption/api/auth/inspect_token/"
         headers = {
@@ -140,8 +133,7 @@ def get_game_uid_and_level(access_token):
             return data.get("uid"), None, None
     except:
         pass
-    
-    # Method 4: Try to decode JWT token
+
     try:
         decoded = jwt.decode(access_token, options={"verify_signature": False})
         uid_from_token = decoded.get("external_uid") or decoded.get("account_id")
@@ -149,7 +141,7 @@ def get_game_uid_and_level(access_token):
             return uid_from_token, None, None
     except:
         pass
-    
+
     return None, None, None
 
 def perform_major_login(access_token, open_id):
@@ -240,36 +232,24 @@ def perform_guest_login(uid, password):
 def index():
     return jsonify({
         "api": "JWT Generator API (OB54)",
-        "credit": "SHAPPNO GMR",
-        "telegram": "@SHAPPNO_004X",
-        "status": "running on Vercel ✅",
-        "endpoints": {
-            "/token": {
-                "method": "GET",
-                "params": {
-                    "access_token": "string (optional)",
-                    "uid": "string (optional)",
-                    "password": "string (optional)"
-                }
-            }
-        }
+        "status": "running on Vercel ✅"
     })
 
-@app.route('/token', methods=['GET'])
-def token_endpoint():
-    access_token = request.args.get('access_token')
-    uid = request.args.get('uid')
-    password = request.args.get('password')
+# 🔥 নতুন POST Route যা Telegram Bot থেকে JSON রিসিভ করবে
+@app.route('/process', methods=['POST'])
+def process_json():
+    data = request.get_json(silent=True) or {}
+    
+    access_token = data.get('access_token')
+    uid = data.get('uid')
+    password = data.get('password')
 
     if access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
         if not uid_found:
             return jsonify({"status": "error", "message": "Invalid access_token"}), 400
         
-        # Get Game Real UID and Level
         game_uid, exp, level = get_game_uid_and_level(access_token)
-        
-        # If level not found, set to 1 instead of 0
         if level is None or level == 0:
             level = 1
         
@@ -279,15 +259,14 @@ def token_endpoint():
         
         jwt_token = perform_major_login(access_token, open_id)
         if jwt_token:
-            response_data = {
+            return jsonify({
                 "status": "success",
                 "token": jwt_token,
                 "uid": uid_found,
                 "open_id": open_id,
                 "game_uid": game_uid if game_uid else uid_found,
                 "level": level if level else 1
-            }
-            return jsonify(response_data)
+            })
         return jsonify({"status": "error", "message": "JWT generation failed"}), 500
 
     elif uid and password:
@@ -295,31 +274,25 @@ def token_endpoint():
         if not acc_token or not open_id:
             return jsonify({"status": "error", "message": "Guest login failed"}), 401
         
-        # Get Game Real UID and Level
         game_uid, exp, level = get_game_uid_and_level(acc_token)
-        
         if level is None or level == 0:
             level = 1
         
         jwt_token = perform_major_login(acc_token, open_id)
         if jwt_token:
-            response_data = {
+            return jsonify({
                 "status": "success",
                 "token": jwt_token,
                 "uid": uid,
                 "open_id": open_id,
                 "game_uid": game_uid if game_uid else uid,
                 "level": level if level else 1
-            }
-            return jsonify(response_data)
+            })
         return jsonify({"status": "error", "message": "JWT generation failed"}), 500
 
-    return jsonify({"status": "error", "message": "Provide access_token or uid+password"}), 400
+    return jsonify({"status": "error", "message": "JSON must contain access_token OR uid+password"}), 400
 
-# ========== VERCEL IMPORTANT ==========
-# This is the key part - Vercel needs 'app' exported
-app = app  # Make sure app is exported
+app = app
 
-# For Vercel serverless
 def handler(request, context):
     return app(request, context)
