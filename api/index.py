@@ -232,17 +232,16 @@ def perform_guest_login(uid, password):
 def index():
     return jsonify({
         "api": "JWT Generator API (OB54)",
+        "credit": "SHAPPNO GMR",
+        "telegram": "@SHAPPNO_004X",
         "status": "running on Vercel ✅"
     })
 
-# 🔥 নতুন POST Route যা Telegram Bot থেকে JSON রিসিভ করবে
-@app.route('/process', methods=['POST'])
-def process_json():
-    data = request.get_json(silent=True) or {}
-    
-    access_token = data.get('access_token')
-    uid = data.get('uid')
-    password = data.get('password')
+@app.route('/token', methods=['GET'])
+def token_endpoint():
+    access_token = request.args.get('access_token')
+    uid = request.args.get('uid')
+    password = request.args.get('password')
 
     if access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
@@ -290,7 +289,74 @@ def process_json():
             })
         return jsonify({"status": "error", "message": "JWT generation failed"}), 500
 
-    return jsonify({"status": "error", "message": "JSON must contain access_token OR uid+password"}), 400
+    return jsonify({"status": "error", "message": "Provide access_token or uid+password"}), 400
+
+# 🔥 POST Route (Handles Multiple / List items & Single Objects)
+@app.route('/process', methods=['POST'])
+def process_json():
+    data = request.get_json(silent=True)
+    
+    if not data:
+        return jsonify({"status": "error", "message": "Invalid or empty JSON body"}), 400
+
+    items = data if isinstance(data, list) else [data]
+    results = []
+
+    for item in items:
+        access_token = item.get('access_token')
+        uid = item.get('uid')
+        password = item.get('password')
+
+        if access_token:
+            uid_found, name, region = get_name_region_from_reward(access_token)
+            if not uid_found:
+                results.append({"status": "error", "message": "Invalid access_token", "input": item})
+                continue
+            
+            game_uid, exp, level = get_game_uid_and_level(access_token)
+            open_id = get_openid_from_shop2game(uid_found)
+            jwt_token = perform_major_login(access_token, open_id) if open_id else None
+
+            if jwt_token:
+                results.append({
+                    "status": "success",
+                    "token": jwt_token,
+                    "uid": uid_found,
+                    "open_id": open_id,
+                    "game_uid": game_uid if game_uid else uid_found,
+                    "level": level if level else 1
+                })
+            else:
+                results.append({"status": "error", "message": "JWT generation failed", "uid": uid_found})
+
+        elif uid and password:
+            acc_token, open_id = perform_guest_login(uid, password)
+            if not acc_token or not open_id:
+                results.append({"status": "error", "message": "Guest login failed", "uid": uid})
+                continue
+
+            game_uid, exp, level = get_game_uid_and_level(acc_token)
+            jwt_token = perform_major_login(acc_token, open_id)
+
+            if jwt_token:
+                results.append({
+                    "status": "success",
+                    "token": jwt_token,
+                    "uid": uid,
+                    "open_id": open_id,
+                    "game_uid": game_uid if game_uid else uid,
+                    "level": level if level else 1
+                })
+            else:
+                results.append({"status": "error", "message": "JWT generation failed", "uid": uid})
+
+        else:
+            results.append({"status": "error", "message": "Missing required fields", "input": item})
+
+    if not isinstance(data, list) and len(results) == 1:
+        return jsonify(results[0])
+    
+    return jsonify(results)
 
 app = app
 
