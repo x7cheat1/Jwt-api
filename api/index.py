@@ -7,6 +7,7 @@ import os
 import jwt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
+from concurrent.futures import ThreadPoolExecutor
 
 # ---------- Fixed Import Path for Vercel Serverless ----------
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +78,7 @@ def get_name_region_from_reward(access_token):
             "access-token": access_token,
             "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=10)
+        resp = requests.get(url, headers=headers, verify=False, timeout=5)
         data = resp.json()
         return data.get("uid"), data.get("name"), data.get("region")
     except:
@@ -93,65 +94,10 @@ def get_openid_from_shop2game(uid):
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
         payload = {"app_id": 100067, "login_id": str(uid)}
-        resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
+        resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=5)
         return resp.json().get("open_id")
     except:
         return None
-
-def get_game_uid_and_level(access_token):
-    try:
-        url = "https://ff.garena.com/api/antispam/profile"
-        headers = {
-            "accept": "application/json, text/plain, */*",
-            "access-token": access_token,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
-        }
-        resp = requests.get(url, headers=headers, verify=False, timeout=10)
-        data = resp.json()
-        if data.get("code") == 0:
-            profile = data.get("data", {})
-            return profile.get("uid"), profile.get("exp"), profile.get("level", 0)
-    except:
-        pass
-
-    try:
-        url = "https://ff.garena.com/api/player/profile"
-        headers = {
-            "accept": "application/json, text/plain, */*",
-            "access-token": access_token,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
-        }
-        resp = requests.get(url, headers=headers, verify=False, timeout=10)
-        data = resp.json()
-        if data.get("code") == 0:
-            profile = data.get("data", {})
-            return profile.get("uid"), profile.get("exp"), profile.get("level", 0)
-    except:
-        pass
-
-    try:
-        url = "https://prod-api.reward.ff.garena.com/redemption/api/auth/inspect_token/"
-        headers = {
-            "accept": "application/json, text/plain, */*",
-            "access-token": access_token,
-            "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
-        }
-        resp = requests.get(url, headers=headers, verify=False, timeout=10)
-        data = resp.json()
-        if data.get("uid"):
-            return data.get("uid"), None, None
-    except:
-        pass
-
-    try:
-        decoded = jwt.decode(access_token, options={"verify_signature": False})
-        uid_from_token = decoded.get("external_uid") or decoded.get("account_id")
-        if uid_from_token:
-            return uid_from_token, None, None
-    except:
-        pass
-
-    return None, None, None
 
 def perform_major_login(access_token, open_id):
     platforms = [8, 3, 4, 6]
@@ -200,7 +146,7 @@ def perform_major_login(access_token, open_id):
                 "ReleaseVersion": FREEFIRE_VERSION
             }
 
-            resp = requests.post(MAJOR_LOGIN_URL, data=edata, headers=headers, verify=False, timeout=10)
+            resp = requests.post(MAJOR_LOGIN_URL, data=edata, headers=headers, verify=False, timeout=5)
             if resp.status_code == 200:
                 try:
                     msg = output_pb2.Garena_420()
@@ -228,13 +174,46 @@ def perform_guest_login(uid, password):
         'Connection': "Keep-Alive"
     }
     try:
-        resp = requests.post(OAUTH_URL, data=payload, headers=headers, timeout=10, verify=False)
+        resp = requests.post(OAUTH_URL, data=payload, headers=headers, timeout=5, verify=False)
         data = resp.json()
         if 'access_token' in data:
             return data['access_token'], data.get('open_id')
     except:
         pass
     return None, None
+
+def process_single_item(item):
+    access_token = item.get('access_token')
+    uid = item.get('uid')
+    password = item.get('password')
+
+    if access_token:
+        uid_found, name, region = get_name_region_from_reward(access_token)
+        if not uid_found:
+            return {"status": "error", "message": "Invalid access_token"}
+        
+        open_id = get_openid_from_shop2game(uid_found)
+        jwt_token = perform_major_login(access_token, open_id) if open_id else None
+
+        if jwt_token:
+            return {"token": jwt_token}
+        else:
+            return {"status": "error", "message": "JWT generation failed"}
+
+    elif uid and password:
+        acc_token, open_id = perform_guest_login(uid, password)
+        if not acc_token or not open_id:
+            return {"status": "error", "message": "Guest login failed"}
+
+        jwt_token = perform_major_login(acc_token, open_id)
+
+        if jwt_token:
+            return {"token": jwt_token}
+        else:
+            return {"status": "error", "message": "JWT generation failed"}
+
+    else:
+        return {"status": "error", "message": "Missing required fields"}
 
 # ---------- Routes ----------
 @app.route('/', methods=['GET'])
@@ -251,76 +230,12 @@ def token_endpoint():
     uid = request.args.get('uid')
     password = request.args.get('password')
 
-    if access_token:
-        uid_found, name, region = get_name_region_from_reward(access_token)
-        if not uid_found:
-            return jsonify({"status": "error", "message": "Invalid access_token"}), 400
-        
-        game_uid, exp, level = get_game_uid_and_level(access_token)
-        if level is None or level == 0:
-            level = 1
-        
-        open_id = get_openid_from_shop2game(uid_found)
-        if not open_id:
-            return jsonify({"status": "error", "message": "Could not fetch open_id"}), 400
-        
-        jwt_token = perform_major_login(access_token, open_id)
-        if jwt_token:
-            return jsonify({
-                "status": "success",
-                "token": jwt_token,
-                "uid": uid_found,
-                "open_id": open_id,
-                "game_uid": game_uid if game_uid else uid_found,
-                "level": level if level else 1
-            })
-        return jsonify({"status": "error", "message": "JWT generation failed"}), 500
+    res = process_single_item({"access_token": access_token, "uid": uid, "password": password})
+    if "token" in res:
+        return jsonify(res)
+    return jsonify(res), 400
 
-    elif uid and password:
-        acc_token, open_id = perform_guest_login(uid, password)
-        if not acc_token or not open_id:
-            return jsonify({"status": "error", "message": "Guest login failed"}), 401
-        
-        game_uid, exp, level = get_game_uid_and_level(acc_token)
-        if level is None or level == 0:
-            level = 1
-        
-        jwt_token = perform_major_login(acc_token, open_id)
-        if jwt_token:
-            return jsonify({
-                "status": "success",
-                "token": jwt_token,
-                "uid": uid,
-                "open_id": open_id,
-                "game_uid": game_uid if game_uid else uid,
-                "level": level if level else 1
-            })
-        return jsonify({"status": "error", "message": "JWT generation failed"}), 500
-
-    return jsonify({"status": "error", "message": "Provide access_token or uid+password"}), 400
-
-# ---------- Format Data Route (Added from Example) ----------
-@app.route('/format-example', methods=['POST'])
-def format_data():
-    data = request.get_json(silent=True)
-
-    if not data:
-        return jsonify({"error": "Invalid payload"}), 400
-
-    items = data if isinstance(data, list) else [data]
-    formatted_results = []
-
-    for item in items:
-        item_id = item.get("id")
-        if item_id:
-            formatted_results.append({
-                "id": item_id,
-                "status": "processed"
-            })
-
-    return jsonify(formatted_results)
-
-# ---------- POST Route (Handles Multiple / List JSON) ----------
+# ---------- POST Route (Handles Multiple / List JSON concurrently) ----------
 @app.route('/process', methods=['POST'])
 def process_json():
     data = request.get_json(silent=True)
@@ -329,69 +244,18 @@ def process_json():
         return jsonify({"status": "error", "message": "Invalid or empty JSON body"}), 400
 
     items = data if isinstance(data, list) else [data]
-    results = []
 
-    for item in items:
-        access_token = item.get('access_token')
-        uid = item.get('uid')
-        password = item.get('password')
-
-        if access_token:
-            uid_found, name, region = get_name_region_from_reward(access_token)
-            if not uid_found:
-                results.append({"status": "error", "message": "Invalid access_token", "input": item})
-                continue
-            
-            game_uid, exp, level = get_game_uid_and_level(access_token)
-            open_id = get_openid_from_shop2game(uid_found)
-            jwt_token = perform_major_login(access_token, open_id) if open_id else None
-
-            if jwt_token:
-                results.append({
-                    "status": "success",
-                    "token": jwt_token,
-                    "uid": uid_found,
-                    "open_id": open_id,
-                    "game_uid": game_uid if game_uid else uid_found,
-                    "level": level if level else 1
-                })
-            else:
-                results.append({"status": "error", "message": "JWT generation failed", "uid": uid_found})
-
-        elif uid and password:
-            acc_token, open_id = perform_guest_login(uid, password)
-            if not acc_token or not open_id:
-                results.append({"status": "error", "message": "Guest login failed", "uid": uid})
-                continue
-
-            game_uid, exp, level = get_game_uid_and_level(acc_token)
-            jwt_token = perform_major_login(acc_token, open_id)
-
-            if jwt_token:
-                results.append({
-                    "status": "success",
-                    "token": jwt_token,
-                    "uid": uid,
-                    "open_id": open_id,
-                    "game_uid": game_uid if game_uid else uid,
-                    "level": level if level else 1
-                })
-            else:
-                results.append({"status": "error", "message": "JWT generation failed", "uid": uid})
-
-        else:
-            results.append({"status": "error", "message": "Missing required fields", "input": item})
+    # Concurrent processing using ThreadPoolExecutor
+    max_workers = min(len(items), 20)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(process_single_item, items))
 
     if not isinstance(data, list) and len(results) == 1:
         return jsonify(results[0])
     
     return jsonify(results)
 
-# ---------- Vercel Handler ----------
 app = app
 
 def handler(request, context):
     return app(request, context)
-
-if __name__ == '__main__':
-    app.run(debug=True)
