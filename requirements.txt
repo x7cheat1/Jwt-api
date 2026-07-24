@@ -1,5 +1,5 @@
 Flask
 requests
 pycryptodome
-protobuf==4.25.3
 PyJWT
+protobuf
