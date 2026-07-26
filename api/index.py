@@ -4,7 +4,6 @@ import binascii
 import random
 import sys
 import os
-import jwt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from concurrent.futures import ThreadPoolExecutor
@@ -33,6 +32,10 @@ FREEFIRE_VERSION = "OB54"
 
 KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
+
+# Global Requests Session for Connection Reuse (Fast Processing)
+http_session = requests.Session()
+http_session.verify = False
 
 # ---------- Device Database ----------
 DEVICES = [
@@ -78,7 +81,7 @@ def get_name_region_from_reward(access_token):
             "access-token": access_token,
             "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
-        resp = requests.get(url, headers=headers, verify=False, timeout=5)
+        resp = http_session.get(url, headers=headers, timeout=4)
         data = resp.json()
         return data.get("uid"), data.get("name"), data.get("region")
     except:
@@ -94,7 +97,7 @@ def get_openid_from_shop2game(uid):
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
         }
         payload = {"app_id": 100067, "login_id": str(uid)}
-        resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=5)
+        resp = http_session.post(url, headers=headers, json=payload, timeout=4)
         return resp.json().get("open_id")
     except:
         return None
@@ -146,7 +149,7 @@ def perform_major_login(access_token, open_id):
                 "ReleaseVersion": FREEFIRE_VERSION
             }
 
-            resp = requests.post(MAJOR_LOGIN_URL, data=edata, headers=headers, verify=False, timeout=5)
+            resp = http_session.post(MAJOR_LOGIN_URL, data=edata, headers=headers, timeout=4)
             if resp.status_code == 200:
                 try:
                     msg = output_pb2.Garena_420()
@@ -174,7 +177,7 @@ def perform_guest_login(uid, password):
         'Connection': "Keep-Alive"
     }
     try:
-        resp = requests.post(OAUTH_URL, data=payload, headers=headers, timeout=5, verify=False)
+        resp = http_session.post(OAUTH_URL, data=payload, headers=headers, timeout=4)
         data = resp.json()
         if 'access_token' in data:
             return data['access_token'], data.get('open_id')
@@ -220,7 +223,7 @@ def process_single_item(item):
 def index():
     return jsonify({
         "api": "JWT Generator API (OB54)",
-        "credit": "SHAPPNO GMR",
+        "credit": "NABIL x7",
         "status": "running on Vercel ✅"
     })
 
@@ -235,7 +238,7 @@ def token_endpoint():
         return jsonify(res)
     return jsonify(res), 400
 
-# ---------- POST Route (Handles Multiple / List JSON concurrently) ----------
+# ---------- POST Route (Batch Processing) ----------
 @app.route('/process', methods=['POST'])
 def process_json():
     data = request.get_json(silent=True)
@@ -243,16 +246,18 @@ def process_json():
     if not data:
         return jsonify({"status": "error", "message": "Invalid or empty JSON body"}), 400
 
-    items = data if isinstance(data, list) else [data]
+    # Single Item Process
+    if not isinstance(data, list):
+        res = process_single_item(data)
+        if "token" in res:
+            return jsonify(res)
+        return jsonify(res), 400
 
-    # Concurrent processing using ThreadPoolExecutor
-    max_workers = min(len(items), 20)
+    # Batch Items Process using Concurrent Threads
+    max_workers = min(len(data), 30)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(process_single_item, items))
+        results = list(executor.map(process_single_item, data))
 
-    if not isinstance(data, list) and len(results) == 1:
-        return jsonify(results[0])
-    
     return jsonify(results)
 
 app = app
