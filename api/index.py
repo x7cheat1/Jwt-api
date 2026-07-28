@@ -186,7 +186,7 @@ def perform_major_login(access_token, open_id):
         try:
             device = get_random_device()
             game_data = my_pb2.GameData()
-            game_data.timestamp = "2025-01-15 10:30:45"
+            game_data.timestamp = "2026-07-28 10:30:45"
             game_data.game_name = "free fire"
             game_data.game_version = 1
             game_data.version_code = "1.121.0"
@@ -272,88 +272,87 @@ def perform_guest_login(uid, password):
 
 
 def perform_eat_login(eat_token):
-    # EAT (Encrypted Access Token) এক্সচেঞ্জ ফাংশন
-    payload = {
-        "grant_type": "eat",
-        "eat": eat_token,
-        "client_id": "100067",
-        "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
-    }
+    clients = [
+        {
+            "client_id": "100067",
+            "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+        },
+        {"client_id": "100067", "client_secret": "fd4f9c1186e2469a8b191c0e3e2d63f0"},
+        {"client_id": "100011", "client_secret": "fd4f9c1186e2469a8b191c0e3e2d63f0"},
+    ]
+
     headers = {
         "User-Agent": "FreeFire/1.108.1 (Android)",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    try:
-        resp = http_session.post(
-            OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
-        )
-        data = resp.json()
-        if "access_token" in data:
-            return data["access_token"], data.get("open_id")
-    except:
-        pass
+
+    for cred in clients:
+        payload = {
+            "grant_type": "eat",
+            "eat": eat_token,
+            "client_id": cred["client_id"],
+            "client_secret": cred["client_secret"],
+        }
+        try:
+            resp = http_session.post(
+                OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
+            )
+            data = resp.json()
+            if "access_token" in data:
+                return data["access_token"], data.get("open_id")
+        except:
+            continue
+
     return None, None
 
 
 def process_single_item(item):
-    access_token = item.get("access_token")
+    access_token = item.get("access_token") or item.get("google_token")
     eat_token = item.get("eat") or item.get("eat_token")
     uid = item.get("uid")
     password = item.get("password")
 
-    # লিঙ্ক থেকে EAT টোকেন এক্সট্র্যাক্ট করা (যদি কেউ পুরো লিঙ্ক দিয়ে ফেলে)
+    # Link format handling for EAT Token
     if eat_token and "eat=" in eat_token:
         try:
             eat_token = eat_token.split("eat=")[1].split("&")[0]
         except:
             pass
 
-    # ১. EAT (Encrypted Access Token) লজিক
+    # 1. EAT Token Processing
     if eat_token:
         acc_token, open_id = perform_eat_login(eat_token)
-        if not acc_token or not open_id:
-            return {"status": "error", "message": "EAT Login failed"}
+        if acc_token and open_id:
+            jwt_token = perform_major_login(acc_token, open_id)
+            if jwt_token:
+                return {"token": jwt_token}
 
-        jwt_token = perform_major_login(acc_token, open_id)
-        if jwt_token:
-            return {"token": jwt_token}
-        return {"status": "error", "message": "JWT generation failed"}
-
-    # ২. ডাইরেক্ট Garena Token লজিক
-    elif access_token:
+    # 2. Google OAuth / Direct Garena Access Token Processing
+    if access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
-        if not uid_found:
-            return {"status": "error", "message": "Invalid access_token"}
+        if uid_found:
+            open_id = get_openid_from_shop2game(uid_found)
+            if open_id:
+                jwt_token = perform_major_login(access_token, open_id)
+                if jwt_token:
+                    return {"token": jwt_token}
 
-        open_id = get_openid_from_shop2game(uid_found)
-        jwt_token = (
-            perform_major_login(access_token, open_id) if open_id else None
-        )
-
-        if jwt_token:
-            return {"token": jwt_token}
-        return {"status": "error", "message": "JWT generation failed"}
-
-    # ৩. Guest Account (UID & Password) লজিক
-    elif uid and password:
+    # 3. Guest Account (UID + Password) Processing
+    if uid and password:
         acc_token, open_id = perform_guest_login(uid, password)
-        if not acc_token or not open_id:
-            return {"status": "error", "message": "Guest login failed"}
+        if acc_token and open_id:
+            jwt_token = perform_major_login(acc_token, open_id)
+            if jwt_token:
+                return {"token": jwt_token}
 
-        jwt_token = perform_major_login(acc_token, open_id)
-        if jwt_token:
-            return {"token": jwt_token}
-        return {"status": "error", "message": "JWT generation failed"}
-
-    else:
-        return {"status": "error", "message": "Missing required fields"}
+    return {"status": "error", "message": "Login failed or invalid token/data"}
 
 
 # ---------- Routes ----------
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({
-        "api": "JWT Generator API (Guest + EAT Support)",
+        "api": "JWT Generator API (Guest + EAT + Google Token Support)",
         "credit": "NABIL x7",
         "status": "running on Vercel ✅",
     })
@@ -361,7 +360,9 @@ def index():
 
 @app.route("/token", methods=["GET"])
 def token_endpoint():
-    access_token = request.args.get("access_token")
+    access_token = request.args.get("access_token") or request.args.get(
+        "google_token"
+    )
     eat_token = request.args.get("eat")
     uid = request.args.get("uid")
     password = request.args.get("password")
