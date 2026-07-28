@@ -3,12 +3,17 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import random
 import sys
+import urllib3
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from flask import Flask, jsonify, request
 import requests
+from requests.adapters import HTTPAdapter
 
-# ---------- Fixed Import Path for Vercel Serverless ----------
+# ---------- SSL Warnings & Connection Pool Setup ----------
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Fixed Import Path for Vercel Serverless
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 
@@ -34,8 +39,11 @@ FREEFIRE_VERSION = "OB54"
 KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
-# Global Requests Session for Connection Reuse (Fast Processing)
+# High-Performance Requests Session with Connection Pooling
 http_session = requests.Session()
+adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50)
+http_session.mount("http://", adapter)
+http_session.mount("https://", adapter)
 http_session.verify = False
 
 # ---------- Device Database ----------
@@ -298,9 +306,11 @@ def perform_eat_login(eat_token):
                 OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
             )
             data = resp.json()
+            print(">>> GARENA EAT RESPONSE:", data)
             if "access_token" in data:
                 return data["access_token"], data.get("open_id")
-        except:
+        except Exception as e:
+            print("EAT Exception:", str(e))
             continue
 
     return None, None
@@ -312,7 +322,7 @@ def process_single_item(item):
     uid = item.get("uid")
     password = item.get("password")
 
-    # Link format handling for EAT Token
+    # URL / Parameter parsing for EAT
     if eat_token and "eat=" in eat_token:
         try:
             eat_token = eat_token.split("eat=")[1].split("&")[0]
@@ -327,7 +337,7 @@ def process_single_item(item):
             if jwt_token:
                 return {"token": jwt_token}
 
-    # 2. Google OAuth / Direct Garena Access Token Processing
+    # 2. Direct Garena / Google OAuth Access Token Processing
     if access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
         if uid_found:
@@ -337,7 +347,7 @@ def process_single_item(item):
                 if jwt_token:
                     return {"token": jwt_token}
 
-    # 3. Guest Account (UID + Password) Processing
+    # 3. Guest Account Processing
     if uid and password:
         acc_token, open_id = perform_guest_login(uid, password)
         if acc_token and open_id:
