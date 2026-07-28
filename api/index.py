@@ -27,13 +27,14 @@ app = Flask(__name__)
 
 # ---------- Constants ----------
 MAJOR_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
-OAUTH_URL = "https://100067.connect.garena.com/oauth/guest/token/grant"
-GARENA_GOOGLE_LOGIN_URL = "https://100067.connect.garena.com/oauth/login"
+OAUTH_GUEST_URL = "https://100067.connect.garena.com/oauth/guest/token/grant"
+OAUTH_EAT_URL = "https://100067.connect.garena.com/oauth/token/grant"
 FREEFIRE_VERSION = "OB54"
 
 KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
+# Global Requests Session for Connection Reuse (Fast Processing)
 http_session = requests.Session()
 http_session.verify = False
 
@@ -68,6 +69,56 @@ DEVICES = [
         "res": ["1080", "2400"],
         "dpi": "395",
         "ram": "6144",
+    },
+    {
+        "model": "OnePlus 9",
+        "android": "13",
+        "api": "33",
+        "cpu": "ARMv8 | 2900 | 8",
+        "gpu": "Adreno 660",
+        "res": ["1080", "2400"],
+        "dpi": "420",
+        "ram": "8192",
+    },
+    {
+        "model": "VIVO V21",
+        "android": "12",
+        "api": "31",
+        "cpu": "ARMv8 | 2400 | 8",
+        "gpu": "Mali-G57",
+        "res": ["1080", "2400"],
+        "dpi": "400",
+        "ram": "8192",
+    },
+    {
+        "model": "OPPO Reno6",
+        "android": "11",
+        "api": "30",
+        "cpu": "ARMv8 | 2200 | 8",
+        "gpu": "Mali-G52",
+        "res": ["1080", "2400"],
+        "dpi": "410",
+        "ram": "6144",
+    },
+    {
+        "model": "Pixel 6",
+        "android": "13",
+        "api": "33",
+        "cpu": "ARMv8 | 2800 | 8",
+        "gpu": "Mali-G78",
+        "res": ["1080", "2400"],
+        "dpi": "440",
+        "ram": "8192",
+    },
+    {
+        "model": "TECNO Spark 8",
+        "android": "11",
+        "api": "30",
+        "cpu": "ARMv8 | 1800 | 8",
+        "gpu": "Mali-G52",
+        "res": ["720", "1640"],
+        "dpi": "320",
+        "ram": "4096",
     },
 ]
 
@@ -127,29 +178,6 @@ def get_openid_from_shop2game(uid):
         return resp.json().get("open_id")
     except:
         return None
-
-
-# Google OAuth -> Garena Access Token Convert
-def perform_google_login(google_access_token):
-    payload = {
-        "app_id": 100067,
-        "login_type": "google",
-        "access_token": google_access_token,
-    }
-    headers = {
-        "User-Agent": "FreeFire/1.108.1 (Android)",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = http_session.post(
-            GARENA_GOOGLE_LOGIN_URL, json=payload, headers=headers, timeout=5
-        )
-        data = resp.json()
-        if "access_token" in data:
-            return data["access_token"], data.get("open_id")
-    except:
-        pass
-    return None, None
 
 
 def perform_major_login(access_token, open_id):
@@ -233,7 +261,31 @@ def perform_guest_login(uid, password):
     }
     try:
         resp = http_session.post(
-            OAUTH_URL, data=payload, headers=headers, timeout=4
+            OAUTH_GUEST_URL, data=payload, headers=headers, timeout=4
+        )
+        data = resp.json()
+        if "access_token" in data:
+            return data["access_token"], data.get("open_id")
+    except:
+        pass
+    return None, None
+
+
+def perform_eat_login(eat_token):
+    # EAT (Encrypted Access Token) এক্সচেঞ্জ ফাংশন
+    payload = {
+        "grant_type": "eat",
+        "eat": eat_token,
+        "client_id": "100067",
+        "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+    }
+    headers = {
+        "User-Agent": "FreeFire/1.108.1 (Android)",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    try:
+        resp = http_session.post(
+            OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
         )
         data = resp.json()
         if "access_token" in data:
@@ -245,24 +297,29 @@ def perform_guest_login(uid, password):
 
 def process_single_item(item):
     access_token = item.get("access_token")
-    google_access_token = item.get("google_token") or item.get(
-        "google_access_token"
-    )
+    eat_token = item.get("eat") or item.get("eat_token")
     uid = item.get("uid")
     password = item.get("password")
 
-    # জিমেইল আইডির জন্য প্রসেস
-    if google_access_token:
-        acc_token, open_id = perform_google_login(google_access_token)
+    # লিঙ্ক থেকে EAT টোকেন এক্সট্র্যাক্ট করা (যদি কেউ পুরো লিঙ্ক দিয়ে ফেলে)
+    if eat_token and "eat=" in eat_token:
+        try:
+            eat_token = eat_token.split("eat=")[1].split("&")[0]
+        except:
+            pass
+
+    # ১. EAT (Encrypted Access Token) লজিক
+    if eat_token:
+        acc_token, open_id = perform_eat_login(eat_token)
         if not acc_token or not open_id:
-            return {"status": "error", "message": "Google Login failed"}
+            return {"status": "error", "message": "EAT Login failed"}
 
         jwt_token = perform_major_login(acc_token, open_id)
         if jwt_token:
             return {"token": jwt_token}
         return {"status": "error", "message": "JWT generation failed"}
 
-    # ডাইরেক্ট Garena Token এর জন্য প্রসেস
+    # ২. ডাইরেক্ট Garena Token লজিক
     elif access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
         if not uid_found:
@@ -277,7 +334,7 @@ def process_single_item(item):
             return {"token": jwt_token}
         return {"status": "error", "message": "JWT generation failed"}
 
-    # গেস্ট আইডির জন্য প্রসেস
+    # ৩. Guest Account (UID & Password) লজিক
     elif uid and password:
         acc_token, open_id = perform_guest_login(uid, password)
         if not acc_token or not open_id:
@@ -296,22 +353,22 @@ def process_single_item(item):
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({
-        "api": "Universal JWT Generator API (Guest + Gmail)",
+        "api": "JWT Generator API (Guest + EAT Support)",
         "credit": "NABIL x7",
-        "status": "running ✅",
+        "status": "running on Vercel ✅",
     })
 
 
 @app.route("/token", methods=["GET"])
 def token_endpoint():
     access_token = request.args.get("access_token")
-    google_token = request.args.get("google_token")
+    eat_token = request.args.get("eat")
     uid = request.args.get("uid")
     password = request.args.get("password")
 
     res = process_single_item({
         "access_token": access_token,
-        "google_token": google_token,
+        "eat": eat_token,
         "uid": uid,
         "password": password,
     })
@@ -320,21 +377,25 @@ def token_endpoint():
     return jsonify(res), 400
 
 
+# ---------- POST Route (Batch Processing) ----------
 @app.route("/process", methods=["POST"])
 def process_json():
     data = request.get_json(silent=True)
+
     if not data:
         return (
-            jsonify({"status": "error", "message": "Invalid JSON body"}),
+            jsonify({"status": "error", "message": "Invalid or empty JSON body"}),
             400,
         )
 
+    # Single Item Process
     if not isinstance(data, list):
         res = process_single_item(data)
         if "token" in res:
             return jsonify(res)
         return jsonify(res), 400
 
+    # Batch Items Process using Concurrent Threads
     max_workers = min(len(data), 30)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(process_single_item, data))
