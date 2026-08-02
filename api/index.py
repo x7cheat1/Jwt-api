@@ -4,6 +4,8 @@ import os
 import random
 import sys
 import urllib3
+import re
+from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from flask import Flask, jsonify, request
@@ -87,49 +89,8 @@ DEVICES = [
         "res": ["1080", "2400"],
         "dpi": "420",
         "ram": "8192",
-    },
-    {
-        "model": "VIVO V21",
-        "android": "12",
-        "api": "31",
-        "cpu": "ARMv8 | 2400 | 8",
-        "gpu": "Mali-G57",
-        "res": ["1080", "2400"],
-        "dpi": "400",
-        "ram": "8192",
-    },
-    {
-        "model": "OPPO Reno6",
-        "android": "11",
-        "api": "30",
-        "cpu": "ARMv8 | 2200 | 8",
-        "gpu": "Mali-G52",
-        "res": ["1080", "2400"],
-        "dpi": "410",
-        "ram": "6144",
-    },
-    {
-        "model": "Pixel 6",
-        "android": "13",
-        "api": "33",
-        "cpu": "ARMv8 | 2800 | 8",
-        "gpu": "Mali-G78",
-        "res": ["1080", "2400"],
-        "dpi": "440",
-        "ram": "8192",
-    },
-    {
-        "model": "TECNO Spark 8",
-        "android": "11",
-        "api": "30",
-        "cpu": "ARMv8 | 1800 | 8",
-        "gpu": "Mali-G52",
-        "res": ["720", "1640"],
-        "dpi": "320",
-        "ram": "4096",
-    },
+    }
 ]
-
 
 def get_random_device():
     device = random.choice(DEVICES)
@@ -150,12 +111,10 @@ def get_random_device():
         "build": f"TP1A.220624.{random.randint(100,999)}",
     }
 
-
 def encrypt_data(data_bytes):
     cipher = AES.new(KEY, AES.MODE_CBC, IV)
     padded = pad(data_bytes, AES.block_size)
     return cipher.encrypt(padded)
-
 
 def get_name_region_from_reward(access_token):
     try:
@@ -170,7 +129,6 @@ def get_name_region_from_reward(access_token):
         return data.get("uid"), data.get("name"), data.get("region")
     except:
         return None, None, None
-
 
 def get_openid_from_shop2game(uid):
     if not uid:
@@ -187,14 +145,14 @@ def get_openid_from_shop2game(uid):
     except:
         return None
 
-
 def perform_major_login(access_token, open_id):
     platforms = [8, 3, 4, 6]
     for platform_type in platforms:
         try:
             device = get_random_device()
             game_data = my_pb2.GameData()
-            game_data.timestamp = "2026-07-28 10:30:45"
+            # Dynamic Timestamp added for stability
+            game_data.timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             game_data.game_name = "free fire"
             game_data.game_version = 1
             game_data.version_code = "1.121.0"
@@ -253,7 +211,6 @@ def perform_major_login(access_token, open_id):
             continue
     return None
 
-
 def perform_guest_login(uid, password):
     payload = {
         "uid": uid,
@@ -277,7 +234,6 @@ def perform_guest_login(uid, password):
     except:
         pass
     return None, None
-
 
 def perform_eat_login(eat_token):
     clients = [
@@ -306,30 +262,30 @@ def perform_eat_login(eat_token):
                 OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
             )
             data = resp.json()
-            print(">>> GARENA EAT RESPONSE:", data)
             if "access_token" in data:
                 return data["access_token"], data.get("open_id")
         except Exception as e:
-            print("EAT Exception:", str(e))
             continue
 
     return None, None
 
+def extract_eat_token(input_str):
+    if not input_str:
+        return None
+    # Auto-extract Token if full URL is passed
+    if "eat=" in input_str:
+        match = re.search(r'eat=([a-f0-9]+)', input_str)
+        if match:
+            return match.group(1)
+    return input_str.strip()
 
 def process_single_item(item):
     access_token = item.get("access_token") or item.get("google_token")
-    eat_token = item.get("eat") or item.get("eat_token")
+    eat_token = extract_eat_token(item.get("eat") or item.get("eat_token") or item.get("url"))
     uid = item.get("uid")
     password = item.get("password")
 
-    # URL / Parameter parsing for EAT
-    if eat_token and "eat=" in eat_token:
-        try:
-            eat_token = eat_token.split("eat=")[1].split("&")[0]
-        except:
-            pass
-
-    # 1. EAT Token Processing
+    # 1. EAT Token / Link Processing (Gmail Account support included)
     if eat_token:
         acc_token, open_id = perform_eat_login(eat_token)
         if acc_token and open_id:
@@ -357,7 +313,6 @@ def process_single_item(item):
 
     return {"status": "error", "message": "Login failed or invalid token/data"}
 
-
 # ---------- Routes ----------
 @app.route("/", methods=["GET"])
 def index():
@@ -367,13 +322,11 @@ def index():
         "status": "running on Vercel ✅",
     })
 
-
 @app.route("/token", methods=["GET"])
 def token_endpoint():
-    access_token = request.args.get("access_token") or request.args.get(
-        "google_token"
-    )
-    eat_token = request.args.get("eat")
+    access_token = request.args.get("access_token") or request.args.get("google_token")
+    # Supports both direct eat parameter or full URL input
+    eat_token = request.args.get("eat") or request.args.get("url")
     uid = request.args.get("uid")
     password = request.args.get("password")
 
@@ -386,7 +339,6 @@ def token_endpoint():
     if "token" in res:
         return jsonify(res)
     return jsonify(res), 400
-
 
 # ---------- POST Route (Batch Processing) ----------
 @app.route("/process", methods=["POST"])
@@ -413,9 +365,7 @@ def process_json():
 
     return jsonify(results)
 
-
 app = app
-
 
 def handler(request, context):
     return app(request, context)
