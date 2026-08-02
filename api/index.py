@@ -340,7 +340,7 @@ def token_endpoint():
         return jsonify(res)
     return jsonify(res), 400
 
-# ---------- POST Route (Batch Processing) ----------
+# ---------- POST Route (Batch Processing with Vercel Safe Chunking) ----------
 @app.route("/process", methods=["POST"])
 def process_json():
     data = request.get_json(silent=True)
@@ -358,12 +358,19 @@ def process_json():
             return jsonify(res)
         return jsonify(res), 400
 
-    # Batch Items Process using Concurrent Threads
-    max_workers = min(len(data), 30)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(process_single_item, data))
+    # Batch Items Process (Vercel-safe: breaking into chunks of 15)
+    chunk_size = 15
+    data_chunks = [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+    
+    all_results = []
 
-    return jsonify(results)
+    for chunk in data_chunks:
+        max_workers = min(len(chunk), 15)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(process_single_item, chunk))
+            all_results.extend(results)
+
+    return jsonify(all_results)
 
 app = app
 
