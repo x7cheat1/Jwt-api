@@ -8,14 +8,13 @@ import re
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template_string
 import requests
 from requests.adapters import HTTPAdapter
 
 # ---------- SSL Warnings & Connection Pool Setup ----------
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Fixed Import Path for Vercel Serverless
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 
@@ -41,55 +40,17 @@ FREEFIRE_VERSION = "OB54"
 KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
-# High-Performance Requests Session with Connection Pooling
 http_session = requests.Session()
 adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50)
 http_session.mount("http://", adapter)
 http_session.mount("https://", adapter)
 http_session.verify = False
 
-# ---------- Device Database ----------
 DEVICES = [
-    {
-        "model": "SM-G998B",
-        "android": "13",
-        "api": "33",
-        "cpu": "ARMv8 | 2800 | 8",
-        "gpu": "Mali-G78",
-        "res": ["1440", "1080"],
-        "dpi": "480",
-        "ram": "8192",
-    },
-    {
-        "model": "realme C31",
-        "android": "12",
-        "api": "31",
-        "cpu": "ARMv8 | 2000 | 8",
-        "gpu": "Mali-G52",
-        "res": ["720", "1600"],
-        "dpi": "320",
-        "ram": "4096",
-    },
-    {
-        "model": "Mi 11",
-        "android": "12",
-        "api": "32",
-        "cpu": "ARMv8 | 2500 | 8",
-        "gpu": "Adreno 650",
-        "res": ["1080", "2400"],
-        "dpi": "395",
-        "ram": "6144",
-    },
-    {
-        "model": "OnePlus 9",
-        "android": "13",
-        "api": "33",
-        "cpu": "ARMv8 | 2900 | 8",
-        "gpu": "Adreno 660",
-        "res": ["1080", "2400"],
-        "dpi": "420",
-        "ram": "8192",
-    }
+    {"model": "SM-G998B", "android": "13", "api": "33", "cpu": "ARMv8 | 2800 | 8", "gpu": "Mali-G78", "res": ["1440", "1080"], "dpi": "480", "ram": "8192"},
+    {"model": "realme C31", "android": "12", "api": "31", "cpu": "ARMv8 | 2000 | 8", "gpu": "Mali-G52", "res": ["720", "1600"], "dpi": "320", "ram": "4096"},
+    {"model": "Mi 11", "android": "12", "api": "32", "cpu": "ARMv8 | 2500 | 8", "gpu": "Adreno 650", "res": ["1080", "2400"], "dpi": "395", "ram": "6144"},
+    {"model": "OnePlus 9", "android": "13", "api": "33", "cpu": "ARMv8 | 2900 | 8", "gpu": "Adreno 660", "res": ["1080", "2400"], "dpi": "420", "ram": "8192"}
 ]
 
 def get_random_device():
@@ -151,7 +112,6 @@ def perform_major_login(access_token, open_id):
         try:
             device = get_random_device()
             game_data = my_pb2.GameData()
-            # Dynamic Timestamp added for stability
             game_data.timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             game_data.game_name = "free fire"
             game_data.game_version = 1
@@ -167,9 +127,7 @@ def perform_major_login(access_token, open_id):
             game_data.total_ram = int(device["ram"])
             game_data.gpu_name = device["gpu"]
             game_data.gpu_version = "OpenGL ES 3.2"
-            game_data.user_id = (
-                f"Google|{random.randint(1000000000000, 9999999999999)}"
-            )
+            game_data.user_id = f"Google|{random.randint(1000000000000, 9999999999999)}"
             game_data.ip_address = f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
             game_data.language = "en"
             game_data.open_id = open_id
@@ -195,9 +153,7 @@ def perform_major_login(access_token, open_id):
                 "ReleaseVersion": FREEFIRE_VERSION,
             }
 
-            resp = http_session.post(
-                MAJOR_LOGIN_URL, data=edata, headers=headers, timeout=4
-            )
+            resp = http_session.post(MAJOR_LOGIN_URL, data=edata, headers=headers, timeout=4)
             if resp.status_code == 200:
                 try:
                     msg = output_pb2.Garena_420()
@@ -225,9 +181,7 @@ def perform_guest_login(uid, password):
         "Connection": "Keep-Alive",
     }
     try:
-        resp = http_session.post(
-            OAUTH_GUEST_URL, data=payload, headers=headers, timeout=4
-        )
+        resp = http_session.post(OAUTH_GUEST_URL, data=payload, headers=headers, timeout=4)
         data = resp.json()
         if "access_token" in data:
             return data["access_token"], data.get("open_id")
@@ -237,19 +191,14 @@ def perform_guest_login(uid, password):
 
 def perform_eat_login(eat_token):
     clients = [
-        {
-            "client_id": "100067",
-            "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
-        },
+        {"client_id": "100067", "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"},
         {"client_id": "100067", "client_secret": "fd4f9c1186e2469a8b191c0e3e2d63f0"},
         {"client_id": "100011", "client_secret": "fd4f9c1186e2469a8b191c0e3e2d63f0"},
     ]
-
     headers = {
         "User-Agent": "FreeFire/1.108.1 (Android)",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-
     for cred in clients:
         payload = {
             "grant_type": "eat",
@@ -258,21 +207,17 @@ def perform_eat_login(eat_token):
             "client_secret": cred["client_secret"],
         }
         try:
-            resp = http_session.post(
-                OAUTH_EAT_URL, data=payload, headers=headers, timeout=5
-            )
+            resp = http_session.post(OAUTH_EAT_URL, data=payload, headers=headers, timeout=5)
             data = resp.json()
             if "access_token" in data:
                 return data["access_token"], data.get("open_id")
-        except Exception as e:
+        except:
             continue
-
     return None, None
 
 def extract_eat_token(input_str):
     if not input_str:
         return None
-    # Auto-extract Token if full URL is passed
     if "eat=" in input_str:
         match = re.search(r'eat=([a-f0-9]+)', input_str)
         if match:
@@ -285,7 +230,6 @@ def process_single_item(item):
     uid = item.get("uid")
     password = item.get("password")
 
-    # 1. EAT Token / Link Processing (Gmail Account support included)
     if eat_token:
         acc_token, open_id = perform_eat_login(eat_token)
         if acc_token and open_id:
@@ -293,7 +237,6 @@ def process_single_item(item):
             if jwt_token:
                 return {"token": jwt_token}
 
-    # 2. Direct Garena / Google OAuth Access Token Processing
     if access_token:
         uid_found, name, region = get_name_region_from_reward(access_token)
         if uid_found:
@@ -303,7 +246,6 @@ def process_single_item(item):
                 if jwt_token:
                     return {"token": jwt_token}
 
-    # 3. Guest Account Processing
     if uid and password:
         acc_token, open_id = perform_guest_login(uid, password)
         if acc_token and open_id:
@@ -316,16 +258,15 @@ def process_single_item(item):
 # ---------- Routes ----------
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({
-        "api": "JWT Generator API (Guest + EAT + Google Token Support)",
-        "credit": "NABIL x7",
-        "status": "running on Vercel ✅",
-    })
+    html_file = os.path.join(current_dir, "index.html")
+    if os.path.exists(html_file):
+        with open(html_file, "r", encoding="utf-8") as f:
+            return render_template_string(f.read())
+    return jsonify({"api": "JWT Generator API", "status": "running ✅"})
 
 @app.route("/token", methods=["GET"])
 def token_endpoint():
     access_token = request.args.get("access_token") or request.args.get("google_token")
-    # Supports both direct eat parameter or full URL input
     eat_token = request.args.get("eat") or request.args.get("url")
     uid = request.args.get("uid")
     password = request.args.get("password")
@@ -340,28 +281,20 @@ def token_endpoint():
         return jsonify(res)
     return jsonify(res), 400
 
-# ---------- POST Route (Batch Processing with Vercel Safe Chunking) ----------
 @app.route("/process", methods=["POST"])
 def process_json():
     data = request.get_json(silent=True)
-
     if not data:
-        return (
-            jsonify({"status": "error", "message": "Invalid or empty JSON body"}),
-            400,
-        )
+        return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
-    # Single Item Process
     if not isinstance(data, list):
         res = process_single_item(data)
         if "token" in res:
             return jsonify(res)
         return jsonify(res), 400
 
-    # Batch Items Process (Vercel-safe: breaking into chunks of 15)
     chunk_size = 15
     data_chunks = [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
-    
     all_results = []
 
     for chunk in data_chunks:
@@ -373,6 +306,3 @@ def process_json():
     return jsonify(all_results)
 
 app = app
-
-def handler(request, context):
-    return app(request, context)
