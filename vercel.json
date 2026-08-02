@@ -1,27 +1,16 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "index.py",
-      "use": "@vercel/python"
+      "source": "/token",
+      "destination": "/index.py"
     },
     {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/token",
-      "dest": "index.py"
+      "source": "/process",
+      "destination": "/index.py"
     },
     {
-      "src": "/process",
-      "dest": "index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
