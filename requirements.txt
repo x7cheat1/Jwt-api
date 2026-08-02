@@ -1,5 +1,5 @@
-Flask
+flask
 requests
 pycryptodome
-PyJWT
+urllib3
 protobuf
