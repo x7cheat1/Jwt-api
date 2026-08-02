@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>NABIL JWT GENERATOR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Inter',sans-serif;
+      background:#0a0a0a;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      color:#f0ecec;
+      position:relative;
+      overflow-x:hidden;
+    }
+    body::before {
+      content:'';
+      position:fixed;
+      inset:0;
+      z-index:0;
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(40,80,255,0.25) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 70%, rgba(40,80,220,0.20) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(60,120,255,0.08) 0%, transparent 70%);
+      animation: pulseBg 6s ease-in-out infinite alternate;
+    }
+    @keyframes pulseBg {
+      0% { opacity:0.6; transform:scale(1); }
+      100% { opacity:1; transform:scale(1.06); }
+    }
+    .particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+    .particle {
+      position:absolute; width:4px; height:4px; border-radius:50%;
+      animation: float linear infinite; background:rgba(60,120,255,0.3);
+    }
+    @keyframes float {
+      0% { transform:translateY(100vh) scale(0); opacity:0; }
+      10% { opacity:1; }
+      100% { transform:translateY(-10vh) scale(1); opacity:0; }
+    }
+    .app-container {
+      width:100%; max-width:760px; background:rgba(10,8,8,0.92);
+      backdrop-filter:blur(24px); border-radius:44px; padding:32px 28px 28px;
+      border:1px solid rgba(60,120,255,0.12);
+      box-shadow:0 30px 80px rgba(0,0,0,0.8);
+      position:relative; z-index:1;
+    }
+    .header { text-align:center; margin-bottom:20px; }
+    .header .badge {
+      display:inline-block; font-size:10px; font-weight:700; letter-spacing:2px;
+      text-transform:uppercase; background:rgba(60,120,255,0.15); color:#6b9fff;
+      padding:4px 16px; border-radius:100px; border:1px solid rgba(60,120,255,0.2); margin-bottom:8px;
+    }
+    .header h1 {
+      font-size:36px; font-weight:900;
+      background:linear-gradient(135deg,#ffffff 0%,#6b9fff 50%,#4a7aff 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .header .sub { font-size:14px; color:#888; margin-top:4px; }
+    .header .sub span { color:#6b9fff; font-weight:700; }
+    
+    .steps {
+      background:rgba(255,255,255,0.02); border-radius:20px; padding:14px 16px;
+      margin-bottom:18px; border:1px solid rgba(60,120,255,0.06);
+    }
+    .steps .step { display:flex; gap:12px; font-size:13px; color:#b0aaaa; margin-bottom:8px; }
+    .steps .step .num {
+      width:22px; height:22px; border-radius:50%; background:rgba(60,120,255,0.2);
+      color:#6b9fff; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+
+    .provider-section { margin-bottom:16px; }
+    .provider-section .label, .input-section .label {
+      font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:#6a5a5a; margin-bottom:10px;
+    }
+    .provider-grid { display:flex; gap:10px; flex-wrap:wrap; }
+    .provider-btn {
+      flex:1; min-width:60px; padding:12px 0; border-radius:16px; border:1px solid rgba(255,255,255,0.06);
+      background:rgba(255,255,255,0.03); color:#888; cursor:pointer; transition:0.3s;
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+    }
+    .provider-btn:hover, .provider-btn.active {
+      background:rgba(60,120,255,0.15); border-color:rgba(60,120,255,0.3); color:#fff;
+    }
+
+    .input-wrapper {
+      display:flex; background:rgba(0,0,0,0.4); border-radius:18px; padding:4px;
+      border:1px solid rgba(60,120,255,0.1); margin-bottom:14px;
+    }
+    .input-wrapper input {
+      flex:1; background:transparent; border:none; padding:12px 16px; font-size:13px; color:#fff; outline:none;
+    }
+
+    .generate-btn {
+      width:100%; padding:14px; border:none; border-radius:18px; font-size:16px; font-weight:800;
+      background:linear-gradient(135deg,#1a4aff,#0a2aaa); color:#fff; cursor:pointer; transition:0.3s;
+      display:flex; align-items:center; justify-content:center; gap:10px;
+    }
+    .generate-btn:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(40,80,255,0.3); }
+
+    .result-section { margin-top:20px; display:none; }
+    .result-section.visible { display:block; }
+    .result-card {
+      background:rgba(255,255,255,0.02); border-radius:22px; padding:20px; border:1px solid rgba(60,120,255,0.1);
+    }
+    .token-box {
+      background:rgba(0,0,0,0.4); border-radius:14px; padding:12px; border:1px solid rgba(60,120,255,0.05);
+      display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;
+    }
+    .token-text { font-family:monospace; font-size:12px; color:#b0aaaa; word-break:break-all; max-height:80px; overflow-y:auto; }
+    .copy-btn {
+      background:rgba(255,255,255,0.1); border:none; border-radius:10px; padding:8px 14px; color:#fff;
+      font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;
+    }
+    .error-msg {
+      background:rgba(200,20,20,0.15); border:1px solid rgba(255,40,40,0.3); border-radius:14px;
+      padding:12px; color:#ff4a4a; font-weight:600; display:none; margin-top:14px; text-align:center;
+    }
+    .error-msg.visible { display:block; }
+    
+    .footer { margin-top:24px; text-align:center; border-top:1px solid rgba(60,120,255,0.05); padding-top:14px; }
+    .social-links { display:flex; gap:14px; justify-content:center; margin-top:8px; }
+    .social-links a { color:#6a5a5a; text-decoration:none; font-size:13px; }
+    .social-links a:hover { color:#6b9fff; }
+  </style>
+</head>
+<body>
+  <div class="particles" id="particles"></div>
+  <div class="app-container">
+    <div class="header">
+      <div class="badge">⚡ Garena Tool</div>
+      <h1>JWT GENERATOR</h1>
+      <div class="sub">Created by <span>NABIL x7</span></div>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div><strong>Select Provider</strong> to Login Garena</div></div>
+      <div class="step"><div class="num">2</div><div><strong>Copy Full URL</strong> containing <code>eat=...</code></div></div>
+      <div class="step"><div class="num">3</div><div><strong>Paste URL/Token</strong> &amp; Click Generate Access</div></div>
+    </div>
+
+    <div class="provider-section">
+      <div class="label">1. Select Provider</div>
+      <div class="provider-grid">
+        <button class="provider-btn active" data-platform="8"><i class="fab fa-google" style="font-size:22px; color:#ea4335;"></i><span>Google</span></button>
+        <button class="provider-btn" data-platform="3"><i class="fab fa-facebook" style="font-size:22px; color:#1877f2;"></i><span>FB</span></button>
+        <button class="provider-btn" data-platform="10"><i class="fab fa-apple" style="font-size:22px; color:#fff;"></i><span>Apple</span></button>
+        <button class="provider-btn" data-platform="11"><i class="fab fa-x-twitter" style="font-size:20px; color:#fff;"></i><span>X</span></button>
+        <button class="provider-btn" data-platform="5"><i class="fab fa-vk" style="font-size:22px; color:#4c75a3;"></i><span>VK</span></button>
+      </div>
+    </div>
+
+    <div class="input-section">
+      <div class="label">2. Paste URL or EAT Token</div>
+      <div class="input-wrapper">
+        <input type="text" id="tokenInput" placeholder="https://.../?eat=... or token" autocomplete="off" />
+      </div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn"><i class="fas fa-bolt"></i> GENERATE JWT ACCESS</button>
+    <div class="error-msg" id="errorMsg">Error</div>
+
+    <div class="result-section" id="resultSection">
+      <div class="result-card">
+        <div style="margin-bottom:12px;">
+          <span style="font-size:11px; color:#6a5a5a; text-transform:uppercase;">Generated JWT Token</span>
+          <div class="token-box">
+            <div class="token-text" id="resJwtToken">—</div>
+            <button class="copy-btn" id="copyJwtBtn"><i class="fas fa-copy"></i> COPY</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div style="font-size:12px; color:#4a3a3a;">DEVELOPED BY <span style="color:#6b9fff; font-weight:700;">NABIL x7</span></div>
+      <div class="social-links">
+        <a href="https://t.me/NabilxOwner" target="_blank"><i class="fab fa-telegram"></i> Telegram</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Particles Background Effect
+    (function createParticles() {
+      const container = document.getElementById('particles');
+      for (let i=0; i<30; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.left = Math.random() * 100 + '%';
+        const size = Math.random() * 4 + 2;
+        p.style.width = p.style.height = size + 'px';
+        p.style.animationDuration = (Math.random() * 15 + 8) + 's';
+        container.appendChild(p);
+      }
+    })();
+
+    // Garena OAuth Redirect
+    const OAUTH_BASE = 'https://auth.garena.com/universal/oauth?response_type=code&locale=en-SG&client_id=100067&redirect_uri=https://api.ff.garena.co.id/auth/auth/callback_n?site=https://api-discountstore.gid.recargajogo.com.br/oauth/callback_redirect/';
+    document.querySelectorAll('.provider-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        window.open(OAUTH_BASE + '&platform=' + this.dataset.platform, '_blank');
+      });
+    });
+
+    // Handle Generate Action
+    const generateBtn = document.getElementById('generateBtn');
+    const tokenInput = document.getElementById('tokenInput');
+    const errorMsg = document.getElementById('errorMsg');
+    const resultSection = document.getElementById('resultSection');
+    const resJwtToken = document.getElementById('resJwtToken');
+
+    generateBtn.addEventListener('click', async () => {
+      const raw = tokenInput.value.trim();
+      if (!raw) {
+        errorMsg.textContent = 'Please paste a URL or Eat Token first.';
+        errorMsg.classList.add('visible');
+        resultSection.classList.remove('visible');
+        return;
+      }
+
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GENERATING...';
+      errorMsg.classList.remove('visible');
+
+      try {
+        // Calling Your Backend Vercel Flask Endpoint
+        const response = await fetch(`/token?eat=${encodeURIComponent(raw)}`);
+        const data = await response.json();
+
+        if (response.ok && data.token) {
+          resJwtToken.textContent = data.token;
+          resultSection.classList.add('visible');
+        } else {
+          errorMsg.textContent = data.message || 'Failed to generate JWT. Invalid token/link.';
+          errorMsg.classList.add('visible');
+          resultSection.classList.remove('visible');
+        }
+      } catch (err) {
+        errorMsg.textContent = 'Server/Network Error. Please try again.';
+        errorMsg.classList.add('visible');
+        resultSection.classList.remove('visible');
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="fas fa-bolt"></i> GENERATE JWT ACCESS';
+      }
+    });
+
+    // Copy Functionality
+    document.getElementById('copyJwtBtn').addEventListener('click', function() {
+      const text = resJwtToken.textContent;
+      if (text && text !== '—') {
+        navigator.clipboard.writeText(text);
+        this.innerHTML = '<i class="fas fa-check"></i> COPIED';
+        setTimeout(() => this.innerHTML = '<i class="fas fa-copy"></i> COPY', 2000);
+      }
+    });
+  </script>
+</body>
+</html>
