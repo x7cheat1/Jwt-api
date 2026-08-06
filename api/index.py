@@ -123,6 +123,8 @@ def get_name_region_from_reward(access_token):
             "accept": "application/json, text/plain, */*",
             "access-token": access_token,
             "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
         }
         resp = http_session.get(url, headers=headers, timeout=4)
         data = resp.json()
@@ -138,6 +140,8 @@ def get_openid_from_shop2game(uid):
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
         }
         payload = {"app_id": 100067, "login_id": str(uid)}
         resp = http_session.post(url, headers=headers, json=payload, timeout=4)
@@ -187,12 +191,13 @@ def perform_major_login(access_token, open_id):
 
             headers = {
                 "User-Agent": f"Dalvik/2.1.0 (Linux; U; Android {device['android']}; {device['model']})",
-                "Connection": "Keep-Alive",
+                "Connection": "close",
                 "Accept-Encoding": "gzip",
                 "Content-Type": "application/octet-stream",
                 "X-Unity-Version": "2018.4.11f1",
                 "X-GA": "v1 1",
                 "ReleaseVersion": FREEFIRE_VERSION,
+                "Cache-Control": "no-cache"
             }
 
             resp = http_session.post(
@@ -222,7 +227,9 @@ def perform_guest_login(uid, password):
     }
     headers = {
         "User-Agent": f"GarenaMSDK/4.0.19P9({random.choice(['SM-G998B','realme C31','Mi 11'])} ;Android {random.choice(['11','12','13'])};pt;BR;)",
-        "Connection": "Keep-Alive",
+        "Connection": "close",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
     }
     try:
         resp = http_session.post(
@@ -248,6 +255,8 @@ def perform_eat_login(eat_token):
     headers = {
         "User-Agent": "FreeFire/1.108.1 (Android)",
         "Content-Type": "application/x-www-form-urlencoded",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
     }
 
     for cred in clients:
